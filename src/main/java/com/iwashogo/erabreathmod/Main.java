@@ -101,70 +101,55 @@ public class Main {
     public void onDrinkMilk(PlayerInteractEvent.RightClickItem event){
         if(event.getItemStack().getDisplayName().getFormattedText().equals("Milk Bucket")){
             LOGGER.info("Milk!!");
-            poisonCount = 50;
+            poisonCount = 30;
         }
     }
 
     @SubscribeEvent
     public void onWaterEffects(TickEvent.PlayerTickEvent event) {
-        if(!event.player.getEntityWorld().isRemote()){
-            if(++tickCount % 50 == 0){
-                LOGGER.info(event.player.getActivePotionEffects());
+
+        if(++tickCount % 50 == 0){
+            if(!event.player.getEntityWorld().isRemote()){
                 // Add PotionEffect "WATER_BREATHING" when Player is in the water
                 if(event.player.isInWater()){
                     LOGGER.info("YOU ARE IN WATER!");
+                    //add good potion for living in water
                     event.player.addPotionEffect(new PotionEffect(MobEffects.WATER_BREATHING,100000,0));
                     event.player.addPotionEffect(new PotionEffect(MobEffects.CONDUIT_POWER,10000,0));
-
-                    while(event.player.isPotionActive(MobEffects.POISON)){
+                    //cure the POISON
+                    if(event.player.isPotionActive(MobEffects.POISON)){
                         event.player.removePotionEffect(MobEffects.POISON);
                     }
-                    //event.player.removePotionEffect(MobEffects.POISON);
-//                if(event.player.isPotionActive(MobEffects.POISON)){
-//                    event.player.removeActivePotionEffect(MobEffects.POISON);
-//                }
                     poisonCount = 1; //Player will have poison just after go out from the water
                 }else{ //Add PotionEffect "POISON" when Player is in the air
                     if(poisonCount < 1){
-                        //event.player.removePotionEffect(MobEffects.POISON);
-                        while(event.player.isPotionActive(MobEffects.POISON)){
+                        if(event.player.isPotionActive(MobEffects.POISON)){
                             event.player.removePotionEffect(MobEffects.POISON);
                         }
-//                    if(event.player.isPotionActive(MobEffects.POISON)){
-//                        event.player.removeActivePotionEffect(MobEffects.POISON);
-//                    }
-                        //event.player.removePotionEffect(MobEffects.POISON);
-                        while(!event.player.isPotionActive(MobEffects.POISON)){
-                            LOGGER.info("POISON result: "+event.player.addPotionEffect(new PotionEffect(MobEffects.POISON, 1000,0)));
-                        }
+                        LOGGER.info("POISON result: "+event.player.addPotionEffect(new PotionEffect(MobEffects.POISON, 1000,0)));
                         poisonCount = 50;
                     }else{
                         --poisonCount;
                         LOGGER.info("poison:" + poisonCount);
                     }
                 }
-                //POISON can't kill the player, so the following code will kill the player
                 if(event.player.getHealth() <= 1.0){
-                    LOGGER.info("You are almost die");
                     event.player.attackEntityFrom(DamageSource.GENERIC,2);
                 }
             }
-            if(tickCount == Integer.MAX_VALUE || tickCount < 0) tickCount = 0;
         }
+        if(tickCount == Integer.MAX_VALUE || tickCount < 0) tickCount = 0;
     }
     //remove expired potion effects(in this case, the POISON effect will be removed)
     @SubscribeEvent
     public void onPotionExpiry(PotionEvent.PotionExpiryEvent event){
         LOGGER.info("potion expiry!!");
 
-        while(event.getEntityLiving().isPotionActive(MobEffects.POISON)){
+        if(event.getEntityLiving().isPotionActive(MobEffects.POISON)){
             event.getEntityLiving().removePotionEffect(MobEffects.POISON);
         }
-//        if(event.getEntityLiving().isPotionActive(MobEffects.POISON)){
-//            event.getEntityLiving().removePotionEffect(MobEffects.POISON);
-//        }
-        //event.getEntityLiving().removePotionEffect(event.getPotionEffect().getPotion());
     }
+
     // You can use EventBusSubscriber to automatically subscribe events on the contained class (this is subscribing to the MOD
     // Event bus for receiving Registry Events)
     @Mod.EventBusSubscriber(bus=Mod.EventBusSubscriber.Bus.MOD)
