@@ -1,15 +1,30 @@
 package com.iwashogo.erabreathmod;
 
+import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.block.Block;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.init.Blocks;
+import net.minecraft.init.Items;
 import net.minecraft.init.MobEffects;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemBucketMilk;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.ItemUseContext;
 import net.minecraft.potion.PotionEffect;
+import net.minecraft.stats.StatList;
 import net.minecraft.util.DamageSource;
+import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegistryEvent;
+import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
+import net.minecraftforge.event.entity.living.PotionEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.InterModComms;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -20,11 +35,14 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.awt.event.ItemEvent;
 import java.util.stream.Collectors;
 @Mod("erabreathmod")
 public class Main {
     //counter for tickEvent
     public int tickCount = 0;
+    //counter for POISON
+    public int poisonCount = 0;
     // Directly reference a log4j logger.
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -67,39 +85,86 @@ public class Main {
                 map(m->m.getMessageSupplier().get()).
                 collect(Collectors.toList()));
     }
+
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(FMLServerStartingEvent event) {
         // do something when the server starts
         LOGGER.info("HELLO from server starting");
     }
+    @SubscribeEvent
+    public void onRespawnEffect(PlayerEvent.PlayerRespawnEvent event){
+        event.getPlayer().addPotionEffect(new PotionEffect(MobEffects.POISON, 1000,0));//reset poisonCount
+    }
+
+    @SubscribeEvent
+    public void onDrinkMilk(PlayerInteractEvent.RightClickItem event){
+        if(event.getItemStack().getDisplayName().getFormattedText().equals("Milk Bucket")){
+            LOGGER.info("Milk!!");
+            poisonCount = 50;
+        }
+    }
 
     @SubscribeEvent
     public void onWaterEffects(TickEvent.PlayerTickEvent event) {
-        if(++tickCount % 100 == 0){
-            // Add PotionEffect "WATER_BREATHING" when Player is in the water
-            if(event.player.isInWater()){
-                LOGGER.info("YOU ARE IN WATER!");
-                event.player.addPotionEffect(new PotionEffect(MobEffects.WATER_BREATHING,100000,0));
-                event.player.removePotionEffect(MobEffects.POISON);
-            }
-            // Add PotionEffect "POISON" when Player is in the air
-            if(!event.player.isInWater()){
-                if(!event.player.isPotionActive(MobEffects.POISON)){ //except adding poison when the player has already poison
-                    event.player.addPotionEffect(new PotionEffect(MobEffects.POISON, 1000,0));
+        if(!event.player.getEntityWorld().isRemote()){
+            if(++tickCount % 50 == 0){
+                LOGGER.info(event.player.getActivePotionEffects());
+                // Add PotionEffect "WATER_BREATHING" when Player is in the water
+                if(event.player.isInWater()){
+                    LOGGER.info("YOU ARE IN WATER!");
+                    event.player.addPotionEffect(new PotionEffect(MobEffects.WATER_BREATHING,100000,0));
+                    event.player.addPotionEffect(new PotionEffect(MobEffects.CONDUIT_POWER,10000,0));
+
+                    while(event.player.isPotionActive(MobEffects.POISON)){
+                        event.player.removePotionEffect(MobEffects.POISON);
+                    }
+                    //event.player.removePotionEffect(MobEffects.POISON);
+//                if(event.player.isPotionActive(MobEffects.POISON)){
+//                    event.player.removeActivePotionEffect(MobEffects.POISON);
+//                }
+                    poisonCount = 1; //Player will have poison just after go out from the water
+                }else{ //Add PotionEffect "POISON" when Player is in the air
+                    if(poisonCount < 1){
+                        //event.player.removePotionEffect(MobEffects.POISON);
+                        while(event.player.isPotionActive(MobEffects.POISON)){
+                            event.player.removePotionEffect(MobEffects.POISON);
+                        }
+//                    if(event.player.isPotionActive(MobEffects.POISON)){
+//                        event.player.removeActivePotionEffect(MobEffects.POISON);
+//                    }
+                        //event.player.removePotionEffect(MobEffects.POISON);
+                        while(!event.player.isPotionActive(MobEffects.POISON)){
+                            LOGGER.info("POISON result: "+event.player.addPotionEffect(new PotionEffect(MobEffects.POISON, 1000,0)));
+                        }
+                        poisonCount = 50;
+                    }else{
+                        --poisonCount;
+                        LOGGER.info("poison:" + poisonCount);
+                    }
+                }
+                //POISON can't kill the player, so the following code will kill the player
+                if(event.player.getHealth() <= 1.0){
+                    LOGGER.info("You are almost die");
+                    event.player.attackEntityFrom(DamageSource.GENERIC,2);
                 }
             }
-            //kill player if its heart is lower than 1.0
-            LOGGER.info(event.player.getHealth());
-            if(event.player.getHealth() <= 1.0){
-                LOGGER.info("You are almost die");
-                event.player.attackEntityFrom(DamageSource.GENERIC,2);
-            }
+            if(tickCount == Integer.MAX_VALUE || tickCount < 0) tickCount = 0;
         }
-        if(tickCount == Integer.MAX_VALUE || tickCount < 0) tickCount = 0;
-
     }
+    //remove expired potion effects(in this case, the POISON effect will be removed)
+    @SubscribeEvent
+    public void onPotionExpiry(PotionEvent.PotionExpiryEvent event){
+        LOGGER.info("potion expiry!!");
 
+        while(event.getEntityLiving().isPotionActive(MobEffects.POISON)){
+            event.getEntityLiving().removePotionEffect(MobEffects.POISON);
+        }
+//        if(event.getEntityLiving().isPotionActive(MobEffects.POISON)){
+//            event.getEntityLiving().removePotionEffect(MobEffects.POISON);
+//        }
+        //event.getEntityLiving().removePotionEffect(event.getPotionEffect().getPotion());
+    }
     // You can use EventBusSubscriber to automatically subscribe events on the contained class (this is subscribing to the MOD
     // Event bus for receiving Registry Events)
     @Mod.EventBusSubscriber(bus=Mod.EventBusSubscriber.Bus.MOD)
